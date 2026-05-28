@@ -114,13 +114,14 @@ def _wrap_node_mappings(namespace):
             if isinstance(cls, type): _wrap_node_class(cls)
 class _Loader(_ia.Loader):
     def __init__(self, fullname, path, is_package=False):
-        self.fullname = fullname; self.path = path; self.is_package = is_package
+        self.fullname = fullname; self.path = path; self._is_package = is_package
     def create_module(self, spec): return None
+    def is_package(self, fullname): return self._is_package
     def exec_module(self, module):
         code = _decrypt_code(self.path.read_bytes())
         module.__file__ = str(self.path); module.__loader__ = self; module.__cached__ = None
-        module.__package__ = self.fullname if self.is_package else self.fullname.rpartition(".")[0]
-        if self.is_package: module.__path__ = [str(self.path.parent)]
+        module.__package__ = self.fullname if self._is_package else self.fullname.rpartition(".")[0]
+        if self._is_package: module.__path__ = [str(self.path.parent)]
         exec(code, module.__dict__)
         _wrap_node_mappings(module.__dict__)
 class _Finder(_ia.MetaPathFinder):
