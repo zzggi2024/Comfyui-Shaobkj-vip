@@ -1,0 +1,7 @@
+config.json
+api_keys.yaml
+*.env
+__pycache__/
+.trae/
+*_history.txt
+shaobkj_async_history.json
