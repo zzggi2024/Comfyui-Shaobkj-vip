@@ -113,10 +113,14 @@ def _wrap_node_mappings(namespace):
         for cls in mappings.values():
             if isinstance(cls, type): _wrap_node_class(cls)
 class _Loader(_ia.Loader):
-    def __init__(self, fullname, path): self.fullname = fullname; self.path = path
+    def __init__(self, fullname, path, is_package=False):
+        self.fullname = fullname; self.path = path; self.is_package = is_package
     def create_module(self, spec): return None
     def exec_module(self, module):
-        code = _decrypt_code(self.path.read_bytes()); module.__file__ = str(self.path); module.__loader__ = self
+        code = _decrypt_code(self.path.read_bytes())
+        module.__file__ = str(self.path); module.__loader__ = self; module.__cached__ = None
+        module.__package__ = self.fullname if self.is_package else self.fullname.rpartition(".")[0]
+        if self.is_package: module.__path__ = [str(self.path.parent)]
         exec(code, module.__dict__)
         _wrap_node_mappings(module.__dict__)
 class _Finder(_ia.MetaPathFinder):
@@ -125,9 +129,10 @@ class _Finder(_ia.MetaPathFinder):
         if not fullname.startswith(prefix): return None
         rel_path = fullname[len(prefix):].replace(".", _os.sep); base = _P(__file__).resolve().parent
         module_file = base / f"{rel_path}.py.sbgc"; package_file = base / rel_path / "__init__.py.sbgc"
-        if module_file.is_file(): return _iu.spec_from_loader(fullname, _Loader(fullname, module_file))
+        if module_file.is_file(): return _iu.spec_from_loader(fullname, _Loader(fullname, module_file), origin=str(module_file))
         if package_file.is_file():
-            spec = _iu.spec_from_loader(fullname, _Loader(fullname, package_file), is_package=True); spec.submodule_search_locations = [str(package_file.parent)]; return spec
+            loader = _Loader(fullname, package_file, True)
+            spec = _iu.spec_from_loader(fullname, loader, origin=str(package_file), is_package=True); spec.submodule_search_locations = [str(package_file.parent)]; return spec
         package_dir = base / rel_path
         if package_dir.is_dir():
             spec = _iu.spec_from_loader(fullname, loader=None, is_package=True); spec.submodule_search_locations = [str(package_dir)]; return spec
