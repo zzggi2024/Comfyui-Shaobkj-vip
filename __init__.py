@@ -4,7 +4,6 @@ import hmac as _hm
 import importlib.abc as _ia
 import importlib.util as _iu
 import json as _json
-import marshal as _marshal
 import os as _os
 import struct as _struct
 import sys as _s
@@ -41,13 +40,13 @@ def _crypt(data, nonce):
         chunk = data[offset:offset + 64]
         out.extend(value ^ block[index] for index, value in enumerate(chunk))
     return bytes(out)
-def _decrypt_code(data):
+def _decrypt_source(data):
     if not data.startswith(_MAGIC): raise ImportError("Invalid encrypted module.")
     nonce = data[len(_MAGIC):len(_MAGIC) + 12]; tag = data[len(_MAGIC) + 12:len(_MAGIC) + 44]; payload = data[len(_MAGIC) + 44:]
     expected = _hm.new(_SECRET, nonce + payload, _h.sha256).digest()
     if not _hm.compare_digest(tag, expected): raise ImportError("Encrypted module integrity check failed.")
     plain = _crypt(payload, nonce)
-    return _marshal.loads(_z.decompress(plain))
+    return _z.decompress(plain).decode("utf-8-sig").lstrip("\ufeff")
 def _is_authorized():
     try:
         payload = _json.loads(_AUTH_FILE.read_text(encoding="utf-8"))
@@ -118,11 +117,11 @@ class _Loader(_ia.Loader):
     def create_module(self, spec): return None
     def is_package(self, fullname): return self._is_package
     def exec_module(self, module):
-        code = _decrypt_code(self.path.read_bytes())
+        source = _decrypt_source(self.path.read_bytes())
         module.__file__ = str(self.path); module.__loader__ = self; module.__cached__ = None
         module.__package__ = self.fullname if self._is_package else self.fullname.rpartition(".")[0]
         if self._is_package: module.__path__ = [str(self.path.parent)]
-        exec(code, module.__dict__)
+        exec(compile(source, str(self.path), "exec"), module.__dict__)
         _wrap_node_mappings(module.__dict__)
 class _Finder(_ia.MetaPathFinder):
     def find_spec(self, fullname, path=None, target=None):
